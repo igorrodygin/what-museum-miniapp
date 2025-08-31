@@ -20,12 +20,22 @@
   const btnRestart = document.getElementById('btn-restart');
   const errEl = document.getElementById('error');
   const loaderEl = document.getElementById('loader');
+  const resultsEl = document.getElementById('results');
+  const resCorrect = document.getElementById('res-correct');
+  const resTotal = document.getElementById('res-total');
+  const resAcc = document.getElementById('res-acc');
+  const resBest = document.getElementById('res-best');
+  const resTitle = document.getElementById('res-title');
+  const resSub = document.getElementById('res-sub');
+  const btnShare = document.getElementById('btn-share');
+  const btnPlayAgain = document.getElementById('btn-play-again');
 
   // Game state
   let items = [];
   let index = 0;
   let correct = 0;
   let streak = 0;
+  let bestStreak = 0;
 
   function shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
@@ -36,13 +46,11 @@
   }
 
   function normalizeItem(raw) {
-    // Map various possible field names to a common schema
     const title = raw.title || raw.name || raw.painting || raw.caption || '';
     const artist = raw.artist || raw.author || raw.painter || raw.creator || '';
     const year = raw.year || raw.date || raw.created || raw.when || '';
     const museum = raw.museum || raw.collection || raw.gallery || '';
     const image = raw.image_url || raw.image || raw.img || raw.url || raw.photo || '';
-
     return { title, artist, year, museum, image_url: image };
   }
 
@@ -53,55 +61,61 @@
         if (!res.ok) continue;
         const json = await res.json();
         if (Array.isArray(json) && json.length) return json;
-      } catch (e) {
-        // continue trying next candidate
-      }
+      } catch (_) {}
     }
     return [];
   }
 
+  function isDirectImage(url) {
+    return /\.(jpg|jpeg|png|webp|avif)(\?|#|$)/i.test(url);
+  }
+  function isArtsPage(url) {
+    return /artsandculture\.google\.com\/asset\//i.test(url);
+  }
+  async function resolveImage(url) {
+    if (!url) return '';
+    if (isDirectImage(url)) return url;
+    if (isArtsPage(url)) {
+      const prox = 'https://r.jina.ai/http/' + url.replace(/^https?:\/\//, '');
+      try {
+        const res = await fetch(prox, { cache: 'reload' });
+        if (!res.ok) return '';
+        const html = await res.text();
+        const m = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+        if (m && m[1]) return m[1];
+      } catch (_) {}
+    }
+    return '';
+  }
+
   async function load() {
     errEl.hidden = true;
+    resultsEl.hidden = true;
+    cardEl.hidden = false;
+
     loaderEl.classList.add('show');
     items = await fetchFirst(['./paintings.json', './data/paintings.json', './assets/paintings.json', 'paintings.json']);
     if (!items.length) {
       errEl.hidden = false;
-      errEl.textContent = 'Не удалось загрузить список картин. Проверьте, что paintings.json находится в корне репозитория (или в /data, /assets) и доступен по HTTPS.';
+      errEl.textContent = 'Не удалось загрузить список картин. Положите paintings.json в корень (или /data, /assets).';
       loaderEl.classList.remove('show');
-      // Disable gameplay to avoid undefined accesses
       btnTretyakov.disabled = true;
       btnRusmuseum.disabled = true;
       return;
     }
-    // Normalize and shuffle
     items = shuffle(items.map(normalizeItem));
-    index = 0;
-    correct = 0;
-    streak = 0;
+    index = 0; correct = 0; streak = 0; bestStreak = 0;
     render();
   }
 
-  function render() {
+  async function render() {
     loaderEl.classList.remove('show');
     if (index >= items.length) {
-      titleEl.textContent = 'Игра завершена!';
-      artistEl.textContent = `Правильных ответов: ${correct} из ${items.length}`;
-      yearEl.textContent = 'Нажмите «Начать заново», чтобы сыграть ещё раз.';
-      imgEl.removeAttribute('src');
-      imgEl.alt = 'Конец игры';
-      progressEl.textContent = `${items.length} / ${items.length}`;
-      streakEl.textContent = `серия: ${streak}`;
-      btnTretyakov.disabled = true;
-      btnRusmuseum.disabled = true;
+      showResults();
       return;
     }
 
     const p = items[index];
-    // If some fields are empty, hide their rows gracefully
-    imgEl.src = p.image_url || '';
-    imgEl.alt = p.title || 'Картина';
-    imgEl.onerror = () => { imgEl.removeAttribute('src'); }; // hide broken image icon
-
     titleEl.textContent = p.title || 'Без названия';
     artistEl.textContent = p.artist ? `${p.artist}` : '—';
     yearEl.textContent = p.year ? `Год: ${p.year}` : '';
@@ -111,6 +125,20 @@
     btnTretyakov.disabled = false;
     btnRusmuseum.disabled = false;
     cardEl.classList.remove('correct', 'wrong');
+
+    loaderEl.classList.add('show');
+    try {
+      const src = await resolveImage(p.image_url);
+      if (src) {
+        imgEl.src = src;
+        imgEl.alt = p.title || 'Картина';
+        imgEl.onerror = () => { imgEl.removeAttribute('src'); };
+      } else {
+        imgEl.removeAttribute('src');
+      }
+    } finally {
+      loaderEl.classList.remove('show');
+    }
   }
 
   function haptic(type) {
@@ -129,15 +157,12 @@
         tg.showPopup({ title, message, buttons: [{ type: 'close' }] });
         return;
       }
-      // Fallback in browsers
-      // eslint-disable-next-line no-alert
       alert(`${title}\n\n${message}`);
     } catch (_) {}
   }
 
   function onAnswer(choice) {
     if (index >= items.length) return;
-
     const p = items[index];
     const isTretyakov = /Третьяков/i.test(p.museum);
     const ok = (choice === 'tretyakov' && isTretyakov) || (choice === 'rusmuseum' && !isTretyakov);
@@ -145,30 +170,73 @@
     if (ok) {
       correct += 1;
       streak += 1;
-      cardEl.classList.add('correct');
-      haptic('success');
+      if (streak > bestStreak) bestStreak = streak;
+      cardEl.classList.add('correct'); haptic('success');
       showPopupSafe('Верно ✅', `${p.title}${p.museum ? ' — ' + p.museum : ''}`);
     } else {
       streak = 0;
-      cardEl.classList.add('wrong');
-      haptic('error');
+      cardEl.classList.add('wrong'); haptic('error');
       showPopupSafe('Неверно ❌', `${p.title}${p.museum ? ' — ' + p.museum : ''}`);
     }
 
-    btnTretyakov.disabled = true;
-    btnRusmuseum.disabled = true;
+    btnTretyakov.disabled = true; btnRusmuseum.disabled = true;
+    setTimeout(() => { cardEl.classList.remove('correct', 'wrong'); index += 1; render(); }, 450);
+  }
 
-    setTimeout(() => {
-      cardEl.classList.remove('correct', 'wrong');
-      index += 1;
-      render();
-    }, 450);
+  function percent(n, d) {
+    if (!d) return '0%';
+    return Math.round((n / d) * 100) + '%';
+  }
+
+  function showResults() {
+    // Fill stats
+    resCorrect.textContent = String(correct);
+    resTotal.textContent = String(items.length);
+    resAcc.textContent = percent(correct, items.length);
+    resBest.textContent = String(bestStreak);
+    resTitle.textContent = correct === items.length ? 'Идеально! 🎉' : 'Игра завершена!';
+    resSub.textContent = `Правильных ответов: ${correct} из ${items.length}`;
+
+    // Toggle views
+    cardEl.hidden = true;
+    resultsEl.hidden = false;
+
+    // Prepare share handler
+    btnShare.onclick = async () => {
+      const appUrl = location.origin + location.pathname;
+      const text = `Я угадал(а) ${correct} из ${items.length} в игре «Третьяковка vs Русский музей». Попробуй и ты!`;
+      const shareUrl = `${appUrl}`;
+      try {
+        if (navigator.share) {
+          await navigator.share({ title: 'Мой результат', text, url: shareUrl });
+          return;
+        }
+      } catch (_) { /* fallthrough to Telegram link */ }
+
+      const tgShare = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(text)}`;
+      try {
+        if (tg?.openTelegramLink) {
+          tg.openTelegramLink(tgShare);
+        } else {
+          location.href = tgShare;
+        }
+      } catch (_) {
+        // Fallback: copy to clipboard
+        try {
+          await navigator.clipboard.writeText(`${text}\n${shareUrl}`);
+          showPopupSafe('Скопировано', 'Ссылка на результат в буфере обмена.');
+        } catch {}
+      }
+    };
+
+    btnPlayAgain.onclick = () => {
+      load();
+    };
   }
 
   btnTretyakov.addEventListener('click', () => onAnswer('tretyakov'));
   btnRusmuseum.addEventListener('click', () => onAnswer('rusmuseum'));
   btnRestart.addEventListener('click', () => load());
 
-  // Kick off
   load();
 })();

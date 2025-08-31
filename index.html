@@ -27,10 +27,29 @@
         <div id="error" class="error" hidden></div>
       </main>
 
-      <div class="actions">
-        <button id="btn-tretyakov" class="btn primary">Третьяковская галерея</button>
-        <button id="btn-rusmuseum" class="btn">Русский музей</button>
-      </div>
+      <section id="results" class="results" hidden>
+        <div class="results-card">
+          <div class="hero">
+            <svg class="trophy" viewBox="0 0 64 64" aria-hidden="true">
+              <path d="M8 8h48v8a12 12 0 0 1-12 12h-6a12 12 0 0 1-24 0H16A12 12 0 0 1 4 16V8h4z" fill="currentColor" opacity=".9"/>
+              <path d="M24 36h16v6a8 8 0 0 1-8 8 8 8 0 0 1-8-8v-6z" fill="currentColor" opacity=".8"/>
+              <rect x="20" y="52" width="24" height="6" rx="3" fill="currentColor" opacity=".7"/>
+            </svg>
+            <h2 id="res-title">Игра завершена!</h2>
+            <p id="res-sub"></p>
+          </div>
+          <div class="stats">
+            <div class="stat"><div class="label">Правильных</div><div class="value" id="res-correct">0</div></div>
+            <div class="stat"><div class="label">Всего</div><div class="value" id="res-total">0</div></div>
+            <div class="stat"><div class="label">Точность</div><div class="value" id="res-acc">0%</div></div>
+            <div class="stat"><div class="label">Лучшая серия</div><div class="value" id="res-best">0</div></div>
+          </div>
+          <div class="results-actions">
+            <button id="btn-share" class="btn primary">Поделиться результатом</button>
+            <button id="btn-play-again" class="btn">Сыграть ещё раз</button>
+          </div>
+        </div>
+      </section>
 
       <footer>
         <button id="btn-restart" class="btn link small">Начать заново</button>
