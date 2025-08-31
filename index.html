@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Третьяковка vs Русский музей</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>Третьяковка vs Русский музей</h1>
+        <div class="score"><span id="progress">0 / 0</span> · <span id="streak">серия: 0</span></div>
+      </header>
+
+      <main id="card" class="card">
+        <div class="image-wrap"><img id="painting-img" alt="Картина" /></div>
+        <div class="meta">
+          <div class="title" id="title">Название</div>
+          <div class="artist" id="artist">Художник</div>
+          <div class="year" id="year">Год</div>
+        </div>
+      </main>
+
+      <div class="actions">
+        <button id="btn-tretyakov" class="btn primary">Третьяковская галерея</button>
+        <button id="btn-rusmuseum" class="btn">Русский музей</button>
+      </div>
+
+      <footer>
+        <button id="btn-restart" class="btn link small">Начать заново</button>
+      </footer>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
