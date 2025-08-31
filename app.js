@@ -1,6 +1,8 @@
-
 (function () {
   'use strict';
+
+  // 👇 ЗАМЕНИТЕ на имя вашего бота (без @)
+  const BOT_USERNAME = "MusemsFightBot";
 
   const tg = window.Telegram?.WebApp;
   try { tg?.ready?.(); tg?.expand?.(); } catch (_) {}
@@ -104,6 +106,7 @@
     if (!url) return '';
     if (isLikelyImage(url)) return url;
     if (isArtsPage(url)) {
+      // читаем HTML страницы через безопасный прокси и достаем og:image
       const prox = 'https://r.jina.ai/http/' + url.replace(/^https?:\/\//, '');
       try {
         const res = await fetch(prox, { cache: 'reload' });
@@ -113,7 +116,7 @@
         if (m && m[1]) return m[1];
       } catch (_) {}
     }
-    // As a last resort, return original; <img> will attempt to load it.
+    // как есть — пусть <img> попробует загрузить
     return url;
   }
 
@@ -240,23 +243,32 @@
     setViewResults();
   }
 
+  // 🔗 Телеграм-шаринг карточки мини-аппа
   async function share() {
-    const appUrl = location.origin + location.pathname;
     const text = `Я угадал(а) ${correct} из ${items.length} в игре «Третьяковка vs Русский музей». Попробуй и ты!`;
+
+    // Можно передавать счёт в payload (например "7_10")
+    const payload = `${correct}_${items.length}`;
+    const appLink = `https://t.me/${BOT_USERNAME}/app?startapp=${encodeURIComponent(payload)}`;
+
+    // 1) system share (если доступен)
     try {
       if (navigator.share) {
-        await navigator.share({ title: 'Мой результат', text, url: appUrl });
+        await navigator.share({ title: 'Мой результат', text, url: appLink });
         return;
       }
-    } catch (_) {}
-    const tgShare = `https://t.me/share/url?url=${encodeURIComponent(appUrl)}&text=${encodeURIComponent(text)}`;
+    } catch (_) { /* fallthrough */ }
+
+    // 2) Telegram share-диалог (даёт карточку мини-аппа)
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(appLink)}&text=${encodeURIComponent(text)}`;
     try {
-      if (tg?.openTelegramLink) tg.openTelegramLink(tgShare);
-      else location.href = tgShare;
+      if (tg?.openTelegramLink) tg.openTelegramLink(shareUrl);
+      else window.open(shareUrl, "_blank");
     } catch (_) {
+      // 3) запасной вариант — копируем ссылку
       try {
-        await navigator.clipboard.writeText(`${text}\n${appUrl}`);
-        showPopupSafe('Скопировано', 'Ссылка на результат в буфере обмена.');
+        await navigator.clipboard.writeText(`${text}\n${appLink}`);
+        showPopupSafe('Скопировано', 'Ссылка на мини-апп в буфере обмена.');
       } catch {}
     }
   }
