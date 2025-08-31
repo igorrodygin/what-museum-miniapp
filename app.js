@@ -134,9 +134,44 @@
     resultsEl.hidden = false;
   }
 
+  // ---------- NEW: чтение и парсинг start_param ----------
+  function getStartParam() {
+    // из Telegram при открытии по t.me/<bot>/app?startapp=...
+    const p = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
+    if (p) return p;
+    // для тестов в браузере: ?startapp=2_10 или ?start_param=2_10
+    const qs = new URLSearchParams(location.search);
+    return qs.get("startapp") || qs.get("start_param") || null;
+  }
+
+  function parseSharedResult(p) {
+    const m = /^(\d+)_(\d+)$/.exec(p);
+    if (!m) return null;
+    const c = Math.min(parseInt(m[1], 10), parseInt(m[2], 10));
+    const t = parseInt(m[2], 10);
+    if (!t) return null;
+    return { c, t, acc: Math.round((c / t) * 100) };
+  }
+  // ------------------------------------------------------
+
   async function load() {
     errEl.hidden = true;
     setViewGame();
+
+    // ---------- NEW: показать результат из start_param ----------
+    const sp = getStartParam();
+    const shared = sp && parseSharedResult(sp);
+    if (shared) {
+      resCorrect.textContent = String(shared.c);
+      resTotal.textContent = String(shared.t);
+      resAcc.textContent = shared.acc + "%";
+      resBest.textContent = "—"; // чужую лучшую серию не знаем
+      resTitle.textContent = "Результат друга";
+      resSub.textContent = `Он/она угадал(а) ${shared.c} из ${shared.t}`;
+      setViewResults();
+      return; // важно: не загружаем игру
+    }
+    // -----------------------------------------------------------
 
     loaderEl.classList.add('show');
     items = await fetchFirst(['./paintings.json', './data/paintings.json', './assets/paintings.json', 'paintings.json']);
@@ -247,7 +282,7 @@
   async function share() {
     const text = `Я угадал(а) ${correct} из ${items.length} в игре «Третьяковка vs Русский музей». Попробуй и ты!`;
 
-    // Можно передавать счёт в payload (например "7_10")
+    // payload с результатом (например "7_10")
     const payload = `${correct}_${items.length}`;
     const appLink = `https://t.me/${BOT_USERNAME}/app?startapp=${encodeURIComponent(payload)}`;
 
