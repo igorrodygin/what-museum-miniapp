@@ -53,23 +53,56 @@
     return { title, artist, year, museum, image_url: image };
   }
 
+  function looksLikePainting(x) {
+    return x && typeof x === 'object' && (
+      ('title' in x || 'name' in x || 'painting' in x || 'caption' in x) ||
+      ('artist' in x || 'author' in x || 'creator' in x || 'painter' in x) ||
+      ('image_url' in x || 'image' in x || 'img' in x || 'url' in x || 'photo' in x)
+    );
+  }
+
+  function pickItems(json) {
+    if (Array.isArray(json)) return json;
+    if (json && typeof json === 'object') {
+      const keys = ['items', 'paintings', 'data', 'artworks', 'cards'];
+      for (const k of keys) {
+        if (Array.isArray(json[k]) && json[k].length) return json[k];
+      }
+      for (const k of Object.keys(json)) {
+        const v = json[k];
+        if (Array.isArray(v) && v.some(looksLikePainting)) return v;
+      }
+    }
+    return [];
+  }
+
   async function fetchFirst(urls) {
     for (const u of urls) {
       try {
         const res = await fetch(u, { cache: 'no-store' });
         if (!res.ok) continue;
         const json = await res.json();
-        if (Array.isArray(json) && json.length) return json;
+        const arr = pickItems(json);
+        if (arr.length) return arr;
       } catch (_) {}
     }
     return [];
   }
 
+  // Image helpers
   const isDirectImage = (url) => /\.(jpg|jpeg|png|webp|avif)(\?|#|$)/i.test(url || '');
+  const isGoogleusercontent = (url) => /(^|\.)(googleusercontent\.com)/i.test(url || '');
+  const isWikimediaThumb = (url) => /upload\.wikimedia\.org\/.*\/thumb\//i.test(url || '');
+  const isDataImage = (url) => /^data:image\//i.test(url || '');
   const isArtsPage = (url) => /artsandculture\.google\.com\/asset\//i.test(url || '');
+
+  function isLikelyImage(url) {
+    return isDirectImage(url) || isGoogleusercontent(url) || isWikimediaThumb(url) || isDataImage(url);
+  }
+
   async function resolveImage(url) {
     if (!url) return '';
-    if (isDirectImage(url)) return url;
+    if (isLikelyImage(url)) return url;
     if (isArtsPage(url)) {
       const prox = 'https://r.jina.ai/http/' + url.replace(/^https?:\/\//, '');
       try {
@@ -80,21 +113,20 @@
         if (m && m[1]) return m[1];
       } catch (_) {}
     }
-    return '';
+    // As a last resort, return original; <img> will attempt to load it.
+    return url;
   }
 
   function setViewGame() {
     resultsEl.style.display = 'none';
     resultsEl.hidden = true;
-
     cardEl.style.display = '';
     actionsEl.style.display = '';
   }
 
   function setViewResults() {
-    cardEl.style.display = 'none'; // полностью скрываем блок картины
+    cardEl.style.display = 'none';
     actionsEl.style.display = 'none';
-
     resultsEl.style.display = 'block';
     resultsEl.hidden = false;
   }
@@ -107,7 +139,7 @@
     items = await fetchFirst(['./paintings.json', './data/paintings.json', './assets/paintings.json', 'paintings.json']);
     if (!items.length) {
       errEl.hidden = false;
-      errEl.textContent = 'Не удалось загрузить список картин. Положите paintings.json в корень (или /data, /assets).';
+      errEl.textContent = 'Не удалось загрузить список картин. Проверьте путь и формат paintings.json';
       loaderEl.classList.remove('show');
       btnTretyakov.disabled = true;
       btnRusmuseum.disabled = true;
