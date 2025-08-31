@@ -15,12 +15,16 @@
       </header>
 
       <main id="card" class="card">
-        <div class="image-wrap"><img id="painting-img" alt="Картина" /></div>
+        <div class="image-wrap">
+          <img id="painting-img" alt="Картина" />
+          <div id="loader" class="loader">Загрузка…</div>
+        </div>
         <div class="meta">
           <div class="title" id="title">Название</div>
           <div class="artist" id="artist">Художник</div>
           <div class="year" id="year">Год</div>
         </div>
+        <div id="error" class="error" hidden></div>
       </main>
 
       <div class="actions">

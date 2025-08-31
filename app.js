@@ -1,11 +1,10 @@
 
 (function () {
+  'use strict';
+
   const tg = window.Telegram?.WebApp;
-  if (tg) {
-    tg.expand();
-    tg.ready();
-    // Apply theme parameters
-    document.documentElement.style.setProperty('--bg', tg.themeParams.bg_color || getComputedStyle(document.documentElement).getPropertyValue('--bg'));
+  if (tg && typeof tg.ready === 'function') {
+    try { tg.ready(); tg.expand(); } catch(_) {}
   }
 
   // Elements
@@ -19,6 +18,8 @@
   const btnTretyakov = document.getElementById('btn-tretyakov');
   const btnRusmuseum = document.getElementById('btn-rusmuseum');
   const btnRestart = document.getElementById('btn-restart');
+  const errEl = document.getElementById('error');
+  const loaderEl = document.getElementById('loader');
 
   // Game state
   let items = [];
@@ -34,10 +35,46 @@
     return array;
   }
 
+  function normalizeItem(raw) {
+    // Map various possible field names to a common schema
+    const title = raw.title || raw.name || raw.painting || raw.caption || '';
+    const artist = raw.artist || raw.author || raw.painter || raw.creator || '';
+    const year = raw.year || raw.date || raw.created || raw.when || '';
+    const museum = raw.museum || raw.collection || raw.gallery || '';
+    const image = raw.image_url || raw.image || raw.img || raw.url || raw.photo || '';
+
+    return { title, artist, year, museum, image_url: image };
+  }
+
+  async function fetchFirst(urls) {
+    for (const u of urls) {
+      try {
+        const res = await fetch(u, { cache: 'no-store' });
+        if (!res.ok) continue;
+        const json = await res.json();
+        if (Array.isArray(json) && json.length) return json;
+      } catch (e) {
+        // continue trying next candidate
+      }
+    }
+    return [];
+  }
+
   async function load() {
-    const res = await fetch('./paintings.json', { cache: 'no-store' });
-    items = await res.json();
-    shuffle(items);
+    errEl.hidden = true;
+    loaderEl.classList.add('show');
+    items = await fetchFirst(['./paintings.json', './data/paintings.json', './assets/paintings.json', 'paintings.json']);
+    if (!items.length) {
+      errEl.hidden = false;
+      errEl.textContent = 'Не удалось загрузить список картин. Проверьте, что paintings.json находится в корне репозитория (или в /data, /assets) и доступен по HTTPS.';
+      loaderEl.classList.remove('show');
+      // Disable gameplay to avoid undefined accesses
+      btnTretyakov.disabled = true;
+      btnRusmuseum.disabled = true;
+      return;
+    }
+    // Normalize and shuffle
+    items = shuffle(items.map(normalizeItem));
     index = 0;
     correct = 0;
     streak = 0;
@@ -45,12 +82,12 @@
   }
 
   function render() {
+    loaderEl.classList.remove('show');
     if (index >= items.length) {
-      // End screen
       titleEl.textContent = 'Игра завершена!';
       artistEl.textContent = `Правильных ответов: ${correct} из ${items.length}`;
       yearEl.textContent = 'Нажмите «Начать заново», чтобы сыграть ещё раз.';
-      imgEl.src = '';
+      imgEl.removeAttribute('src');
       imgEl.alt = 'Конец игры';
       progressEl.textContent = `${items.length} / ${items.length}`;
       streakEl.textContent = `серия: ${streak}`;
@@ -60,11 +97,15 @@
     }
 
     const p = items[index];
-    imgEl.src = p.image_url;
-    imgEl.alt = p.title;
-    titleEl.textContent = p.title;
-    artistEl.textContent = `${p.artist}`;
+    // If some fields are empty, hide their rows gracefully
+    imgEl.src = p.image_url || '';
+    imgEl.alt = p.title || 'Картина';
+    imgEl.onerror = () => { imgEl.removeAttribute('src'); }; // hide broken image icon
+
+    titleEl.textContent = p.title || 'Без названия';
+    artistEl.textContent = p.artist ? `${p.artist}` : '—';
     yearEl.textContent = p.year ? `Год: ${p.year}` : '';
+
     progressEl.textContent = `${index + 1} / ${items.length}`;
     streakEl.textContent = `серия: ${streak}`;
     btnTretyakov.disabled = false;
@@ -72,46 +113,62 @@
     cardEl.classList.remove('correct', 'wrong');
   }
 
-  function vibrate(type) {
+  function haptic(type) {
     try {
       if (tg?.HapticFeedback) {
         if (type === 'success') tg.HapticFeedback.notificationOccurred('success');
         else if (type === 'error') tg.HapticFeedback.notificationOccurred('error');
         else tg.HapticFeedback.impactOccurred('light');
       }
-    } catch {}
+    } catch (_) {}
+  }
+
+  function showPopupSafe(title, message) {
+    try {
+      if (tg?.showPopup) {
+        tg.showPopup({ title, message, buttons: [{ type: 'close' }] });
+        return;
+      }
+      // Fallback in browsers
+      // eslint-disable-next-line no-alert
+      alert(`${title}\n\n${message}`);
+    } catch (_) {}
   }
 
   function onAnswer(choice) {
+    if (index >= items.length) return;
+
     const p = items[index];
-    const isTretyakov = /Третьяков/.test(p.museum);
+    const isTretyakov = /Третьяков/i.test(p.museum);
     const ok = (choice === 'tretyakov' && isTretyakov) || (choice === 'rusmuseum' && !isTretyakov);
 
     if (ok) {
       correct += 1;
       streak += 1;
       cardEl.classList.add('correct');
-      vibrate('success');
-      tg?.showPopup?.({ title: 'Верно ✅', message: `${p.title} — ${p.museum}`, buttons: [{type:'close'}] });
+      haptic('success');
+      showPopupSafe('Верно ✅', `${p.title}${p.museum ? ' — ' + p.museum : ''}`);
     } else {
       streak = 0;
       cardEl.classList.add('wrong');
-      vibrate('error');
-      tg?.showPopup?.({ title: 'Неверно ❌', message: `${p.title} — ${p.museum}`, buttons: [{type:'close'}] });
+      haptic('error');
+      showPopupSafe('Неверно ❌', `${p.title}${p.museum ? ' — ' + p.museum : ''}`);
     }
 
     btnTretyakov.disabled = true;
     btnRusmuseum.disabled = true;
 
     setTimeout(() => {
+      cardEl.classList.remove('correct', 'wrong');
       index += 1;
       render();
-    }, 500);
+    }, 450);
   }
 
   btnTretyakov.addEventListener('click', () => onAnswer('tretyakov'));
   btnRusmuseum.addEventListener('click', () => onAnswer('rusmuseum'));
   btnRestart.addEventListener('click', () => load());
 
+  // Kick off
   load();
 })();
