@@ -27,16 +27,26 @@
         <div id="error" class="error" hidden></div>
       </main>
 
-      <section id="results" class="results" hidden>
+      <div id="actions" class="actions">
+        <button id="btn-tretyakov" class="btn primary">Третьяковская галерея</button>
+        <button id="btn-rusmuseum" class="btn">Русский музей</button>
+      </div>
+
+      <!-- Results SECTION (not overlay). Hidden by default via style + hidden attr -->
+      <section id="results" class="results" style="display:none" hidden>
         <div class="results-card">
           <div class="hero">
-            <svg class="trophy" viewBox="0 0 64 64" aria-hidden="true">
-              <path d="M8 8h48v8a12 12 0 0 1-12 12h-6a12 12 0 0 1-24 0H16A12 12 0 0 1 4 16V8h4z" fill="currentColor" opacity=".9"/>
-              <path d="M24 36h16v6a8 8 0 0 1-8 8 8 8 0 0 1-8-8v-6z" fill="currentColor" opacity=".8"/>
-              <rect x="20" y="52" width="24" height="6" rx="3" fill="currentColor" opacity=".7"/>
+            <!-- Confetti icon -->
+            <svg class="confetti" viewBox="0 0 64 64" aria-hidden="true">
+              <path d="M22 46l-8 12 12-8L22 46z" fill="currentColor" opacity=".85"/>
+              <path d="M10 50l22-22 14 14L24 64 10 50z" fill="currentColor" opacity=".7"/>
+              <circle cx="46" cy="10" r="3" fill="currentColor"/>
+              <circle cx="54" cy="18" r="2" fill="currentColor" opacity=".7"/>
+              <circle cx="40" cy="18" r="2" fill="currentColor" opacity=".6"/>
+              <circle cx="50" cy="28" r="2" fill="currentColor" opacity=".8"/>
             </svg>
             <h2 id="res-title">Игра завершена!</h2>
-            <p id="res-sub"></p>
+            <p id="res-sub" class="muted"></p>
           </div>
           <div class="stats">
             <div class="stat"><div class="label">Правильных</div><div class="value" id="res-correct">0</div></div>
@@ -46,7 +56,6 @@
           </div>
           <div class="results-actions">
             <button id="btn-share" class="btn primary">Поделиться результатом</button>
-            <button id="btn-play-again" class="btn">Сыграть ещё раз</button>
           </div>
         </div>
       </section>

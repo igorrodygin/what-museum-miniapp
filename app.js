@@ -3,9 +3,7 @@
   'use strict';
 
   const tg = window.Telegram?.WebApp;
-  if (tg && typeof tg.ready === 'function') {
-    try { tg.ready(); tg.expand(); } catch(_) {}
-  }
+  try { tg?.ready?.(); tg?.expand?.(); } catch (_) {}
 
   // Elements
   const imgEl = document.getElementById('painting-img');
@@ -15,11 +13,13 @@
   const progressEl = document.getElementById('progress');
   const streakEl = document.getElementById('streak');
   const cardEl = document.getElementById('card');
+  const actionsEl = document.getElementById('actions');
   const btnTretyakov = document.getElementById('btn-tretyakov');
   const btnRusmuseum = document.getElementById('btn-rusmuseum');
   const btnRestart = document.getElementById('btn-restart');
   const errEl = document.getElementById('error');
   const loaderEl = document.getElementById('loader');
+
   const resultsEl = document.getElementById('results');
   const resCorrect = document.getElementById('res-correct');
   const resTotal = document.getElementById('res-total');
@@ -28,7 +28,6 @@
   const resTitle = document.getElementById('res-title');
   const resSub = document.getElementById('res-sub');
   const btnShare = document.getElementById('btn-share');
-  const btnPlayAgain = document.getElementById('btn-play-again');
 
   // Game state
   let items = [];
@@ -66,12 +65,8 @@
     return [];
   }
 
-  function isDirectImage(url) {
-    return /\.(jpg|jpeg|png|webp|avif)(\?|#|$)/i.test(url);
-  }
-  function isArtsPage(url) {
-    return /artsandculture\.google\.com\/asset\//i.test(url);
-  }
+  const isDirectImage = (url) => /\.(jpg|jpeg|png|webp|avif)(\?|#|$)/i.test(url || '');
+  const isArtsPage = (url) => /artsandculture\.google\.com\/asset\//i.test(url || '');
   async function resolveImage(url) {
     if (!url) return '';
     if (isDirectImage(url)) return url;
@@ -88,10 +83,25 @@
     return '';
   }
 
+  function setViewGame() {
+    resultsEl.style.display = 'none';
+    resultsEl.hidden = true;
+
+    cardEl.style.display = '';
+    actionsEl.style.display = '';
+  }
+
+  function setViewResults() {
+    cardEl.style.display = 'none'; // полностью скрываем блок картины
+    actionsEl.style.display = 'none';
+
+    resultsEl.style.display = 'block';
+    resultsEl.hidden = false;
+  }
+
   async function load() {
     errEl.hidden = true;
-    resultsEl.hidden = true;
-    cardEl.hidden = false;
+    setViewGame();
 
     loaderEl.classList.add('show');
     items = await fetchFirst(['./paintings.json', './data/paintings.json', './assets/paintings.json', 'paintings.json']);
@@ -110,10 +120,13 @@
 
   async function render() {
     loaderEl.classList.remove('show');
+
     if (index >= items.length) {
       showResults();
       return;
     }
+
+    setViewGame();
 
     const p = items[index];
     titleEl.textContent = p.title || 'Без названия';
@@ -170,7 +183,7 @@
     if (ok) {
       correct += 1;
       streak += 1;
-      if (streak > bestStreak) bestStreak = streak;
+      bestStreak = Math.max(bestStreak, streak);
       cardEl.classList.add('correct'); haptic('success');
       showPopupSafe('Верно ✅', `${p.title}${p.museum ? ' — ' + p.museum : ''}`);
     } else {
@@ -183,60 +196,44 @@
     setTimeout(() => { cardEl.classList.remove('correct', 'wrong'); index += 1; render(); }, 450);
   }
 
-  function percent(n, d) {
-    if (!d) return '0%';
-    return Math.round((n / d) * 100) + '%';
-  }
+  function percent(n, d) { return d ? Math.round((n/d)*100) + '%' : '0%'; }
 
   function showResults() {
-    // Fill stats
     resCorrect.textContent = String(correct);
     resTotal.textContent = String(items.length);
     resAcc.textContent = percent(correct, items.length);
     resBest.textContent = String(bestStreak);
     resTitle.textContent = correct === items.length ? 'Идеально! 🎉' : 'Игра завершена!';
     resSub.textContent = `Правильных ответов: ${correct} из ${items.length}`;
+    setViewResults();
+  }
 
-    // Toggle views
-    cardEl.hidden = true;
-    resultsEl.hidden = false;
-
-    // Prepare share handler
-    btnShare.onclick = async () => {
-      const appUrl = location.origin + location.pathname;
-      const text = `Я угадал(а) ${correct} из ${items.length} в игре «Третьяковка vs Русский музей». Попробуй и ты!`;
-      const shareUrl = `${appUrl}`;
-      try {
-        if (navigator.share) {
-          await navigator.share({ title: 'Мой результат', text, url: shareUrl });
-          return;
-        }
-      } catch (_) { /* fallthrough to Telegram link */ }
-
-      const tgShare = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(text)}`;
-      try {
-        if (tg?.openTelegramLink) {
-          tg.openTelegramLink(tgShare);
-        } else {
-          location.href = tgShare;
-        }
-      } catch (_) {
-        // Fallback: copy to clipboard
-        try {
-          await navigator.clipboard.writeText(`${text}\n${shareUrl}`);
-          showPopupSafe('Скопировано', 'Ссылка на результат в буфере обмена.');
-        } catch {}
+  async function share() {
+    const appUrl = location.origin + location.pathname;
+    const text = `Я угадал(а) ${correct} из ${items.length} в игре «Третьяковка vs Русский музей». Попробуй и ты!`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Мой результат', text, url: appUrl });
+        return;
       }
-    };
-
-    btnPlayAgain.onclick = () => {
-      load();
-    };
+    } catch (_) {}
+    const tgShare = `https://t.me/share/url?url=${encodeURIComponent(appUrl)}&text=${encodeURIComponent(text)}`;
+    try {
+      if (tg?.openTelegramLink) tg.openTelegramLink(tgShare);
+      else location.href = tgShare;
+    } catch (_) {
+      try {
+        await navigator.clipboard.writeText(`${text}\n${appUrl}`);
+        showPopupSafe('Скопировано', 'Ссылка на результат в буфере обмена.');
+      } catch {}
+    }
   }
 
   btnTretyakov.addEventListener('click', () => onAnswer('tretyakov'));
   btnRusmuseum.addEventListener('click', () => onAnswer('rusmuseum'));
   btnRestart.addEventListener('click', () => load());
+  btnShare.addEventListener('click', () => share());
 
+  // Start
   load();
 })();
