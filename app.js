@@ -2,7 +2,7 @@
   'use strict';
 
   // 👇 ЗАМЕНИТЕ на имя вашего бота (без @)
-  const BOT_USERNAME = "WhatMuseumBot";
+  const BOT_USERNAME = "MusemsFightBot";
 
   const tg = window.Telegram?.WebApp;
   try { tg?.ready?.(); tg?.expand?.(); } catch (_) {}
@@ -61,6 +61,7 @@
   let correct = 0;
   let streak = 0;
   let bestStreak = 0;
+  let renderRequestId = 0;
 
   function shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
@@ -121,6 +122,7 @@
   const isWikimediaThumb = (url) => /upload\.wikimedia\.org\/.*\/thumb\//i.test(url || '');
   const isDataImage = (url) => /^data:image\//i.test(url || '');
   const isArtsPage = (url) => /artsandculture\.google\.com\/asset\//i.test(url || '');
+  const isWikimediaPage = (url) => /commons\.wikimedia\.org\/wiki\/File/i.test(url || '');
   const isRussianMuseumPage = (url) => /rusmuseumvrm\.ru\/data\/collections\/painting\/.+\/index\.php/i.test(url || '');
 
   function isLikelyImage(url) {
@@ -130,7 +132,7 @@
   async function resolveImage(url) {
     if (!url) return '';
     if (isLikelyImage(url)) return url;
-    if (isArtsPage(url) || isRussianMuseumPage(url)) {
+    if (isArtsPage(url) || isRussianMuseumPage(url) || isWikimediaPage(url)) {
       // читаем HTML страницы через безопасный прокси и достаем og:image
       const prox = 'https://r.jina.ai/http/' + url.replace(/^https?:\/\//, '');
       try {
@@ -138,11 +140,11 @@
         if (!res.ok) return '';
         const html = await res.text();
         const m = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
-        if (m && m[1]) return m[1];
+        if (m && m[1]) { try { return new URL(m[1], url).href; } catch (_) { return m[1]; } }
       } catch (_) {}
     }
-    // как есть — пусть <img> попробует загрузить
-    return url;
+    // Page URL is not an image; return empty to avoid flashing wrong content
+    return '';
   }
 
   function setViewGame() {
@@ -199,6 +201,8 @@
     // -----------------------------------------------------------
 
     loaderEl.classList.add('show');
+    // clear previous image immediately to avoid flashing old painting
+    if (imgEl) { imgEl.removeAttribute('src'); imgEl.alt = ''; }
     items = await fetchFirst(['./paintings.json', './data/paintings.json', './assets/paintings.json', 'paintings.json']);
     if (!items.length) {
       errEl.hidden = false;
@@ -214,6 +218,7 @@
   }
 
   async function render() {
+    const localRenderId = ++renderRequestId;
     loaderEl.classList.remove('show');
 
     if (index >= items.length) {
@@ -236,8 +241,12 @@
     cardEl.classList.remove('correct', 'wrong');
 
     loaderEl.classList.add('show');
+    // clear previous image immediately to avoid flashing old painting
+    if (imgEl) { imgEl.removeAttribute('src'); imgEl.alt = ''; }
     try {
       const src = await resolveImage(p.image_url);
+      // avoid race: only apply if still the latest render
+      if (localRenderId !== renderRequestId) return;
       if (src) {
         imgEl.src = src;
         imgEl.alt = p.title || 'Картина';
@@ -348,6 +357,15 @@
   if (titleEl) {
     titleEl.style.cursor = 'pointer';
     titleEl.addEventListener('click', (e) => { e.preventDefault(); openLinkUniversal(currentSourceUrl); });
+  }
+
+  if (artistEl) {
+    artistEl.style.cursor = 'pointer';
+    artistEl.addEventListener('click', (e) => { e.preventDefault(); openLinkUniversal(currentSourceUrl); });
+  }
+  if (yearEl) {
+    yearEl.style.cursor = 'pointer';
+    yearEl.addEventListener('click', (e) => { e.preventDefault(); openLinkUniversal(currentSourceUrl); });
   }
 
 
