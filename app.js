@@ -7,6 +7,30 @@
   const tg = window.Telegram?.WebApp;
   try { tg?.ready?.(); tg?.expand?.(); } catch (_) {}
 
+  // --- Universal link opener (no checks) ---
+  let currentSourceUrl = '';
+  function openLinkUniversal(rawUrl) {
+    const url = String(rawUrl || '').trim();
+    if (!url) return;
+    try {
+      if (window?.Telegram?.WebApp?.openLink) {
+        window.Telegram.WebApp.openLink(url, { try_instant_view: true });
+        return;
+      }
+    } catch (_) {}
+    try {
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (_) {
+      try { window.open(url, '_blank', 'noopener'); } catch {}
+    }
+  }
+
   // Elements
   const imgEl = document.getElementById('painting-img');
   const titleEl = document.getElementById('title');
@@ -97,7 +121,7 @@
   const isWikimediaThumb = (url) => /upload\.wikimedia\.org\/.*\/thumb\//i.test(url || '');
   const isDataImage = (url) => /^data:image\//i.test(url || '');
   const isArtsPage = (url) => /artsandculture\.google\.com\/asset\//i.test(url || '');
-  const isRussianMuseum = (url) => /rusmuseumvrm\.ru\/data\/collections\/painting\/.+\/index\.php/i.test(url || '');
+  const isRussianMuseumPage = (url) => /rusmuseumvrm\.ru\/data\/collections\/painting\/.+\/index\.php/i.test(url || '');
 
   function isLikelyImage(url) {
     return isDirectImage(url) || isGoogleusercontent(url) || isWikimediaThumb(url) || isDataImage(url);
@@ -105,34 +129,21 @@
 
   async function resolveImage(url) {
     if (!url) return '';
-
-    // прямые картинки оставляем как есть
-    if (isDirectImage(url) || isGoogleusercontent(url) || isWikimediaThumb(url) || isDataImage(url)) {
-      return url;
-    }
-
-    // Страницы: тянем og:image через безопасный прокси
+    if (isLikelyImage(url)) return url;
     if (isArtsPage(url) || isRussianMuseumPage(url)) {
+      // читаем HTML страницы через безопасный прокси и достаем og:image
       const prox = 'https://r.jina.ai/http/' + url.replace(/^https?:\/\//, '');
       try {
         const res = await fetch(prox, { cache: 'reload' });
         if (!res.ok) return '';
         const html = await res.text();
-
-        // 1) og:image
-        let m = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
-        if (m && m[1]) return new URL(m[1], url).href;
-
-        // 2) запасной вариант: большая картинка в ссылке
-        m = html.match(/<a[^>]+href=["']([^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["'][^>]*>/i);
-        if (m && m[1]) return new URL(m[1], url).href;
+        const m = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+        if (m && m[1]) return m[1];
       } catch (_) {}
     }
-
-    // иначе лучше вернуть пусто, чем HTML-страницу
-    return '';
+    // как есть — пусть <img> попробует загрузить
+    return url;
   }
-
 
   function setViewGame() {
     resultsEl.style.display = 'none';
@@ -213,6 +224,7 @@
     setViewGame();
 
     const p = items[index];
+    currentSourceUrl = p.image_url || '';
     titleEl.textContent = p.title || 'Без названия';
     artistEl.textContent = p.artist ? `${p.artist}` : '—';
     yearEl.textContent = p.year ? `Год: ${p.year}` : '';
@@ -261,6 +273,7 @@
   function onAnswer(choice) {
     if (index >= items.length) return;
     const p = items[index];
+    currentSourceUrl = p.image_url || '';
     const isTretyakov = /Третьяков/i.test(p.museum);
     const ok = (choice === 'tretyakov' && isTretyakov) || (choice === 'rusmuseum' && !isTretyakov);
 
@@ -326,6 +339,17 @@
   btnRusmuseum.addEventListener('click', () => onAnswer('rusmuseum'));
   btnRestart.addEventListener('click', () => load());
   btnShare.addEventListener('click', () => share());
+
+  // Open source page on title or image click
+  if (imgEl) {
+    imgEl.style.cursor = 'pointer';
+    imgEl.addEventListener('click', (e) => { e.preventDefault(); openLinkUniversal(currentSourceUrl); });
+  }
+  if (titleEl) {
+    titleEl.style.cursor = 'pointer';
+    titleEl.addEventListener('click', (e) => { e.preventDefault(); openLinkUniversal(currentSourceUrl); });
+  }
+
 
   // Start
   load();
