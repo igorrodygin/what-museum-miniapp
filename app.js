@@ -131,17 +131,61 @@
     return isDirectImage(url) || isGoogleusercontent(url) || isWikimediaThumb(url) || isDataImage(url);
   }
 
+  
+  // --- Helpers for robust image resolution ---
+  async function fetchWithTimeout(url, opts = {}, timeoutMs = 8000) {
+    const ctrl = new AbortController();
+    const id = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...opts, signal: ctrl.signal, cache: 'reload' });
+      return res;
+    } finally {
+      clearTimeout(id);
+    }
+  }
+
+  function getCommonsFileName(u) {
+    try {
+      const decoded = decodeURIComponent(String(u || ''));
+      // Match .../wiki/File:<name>  (allow both encoded and plain)
+      const m = decoded.match(/\/wiki\/File:(.+)$/i);
+      if (m && m[1]) return m[1];
+      // Also support plain "File:" beginning
+      const m2 = decoded.match(/File:(.+)$/i);
+      if (m2 && m2[1]) return m2[1];
+    } catch (_) {}
+    return '';
+  }
+
+  function commonsFileToDirect(u, width) {
+    const fname = getCommonsFileName(u);
+    if (!fname) return '';
+    const w = width && Number.isFinite(width) ? `?width=${Math.max(200, Math.min(5000, Math.floor(width)))}` : '';
+    // Use Special:FilePath to get the original file (supports redirect & thumb sizing)
+    return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(fname)}${w}`;
+  }
+
   async function resolveImage(url) {
     if (!url) return '';
     if (isLikelyImage(url)) return url;
+    const commonsDirect = isWikimediaPage(url) ? commonsFileToDirect(url, 1600) : '';
+    if (commonsDirect) return commonsDirect;
     if (isArtsPage(url) || isRussianMuseumPage(url) || isWikimediaPage(url)) {
       // читаем HTML страницы через безопасный прокси и достаем og:image
       const prox = 'https://r.jina.ai/http/' + url.replace(/^https?:\/\//, '');
       try {
-        const res = await fetch(prox, { cache: 'reload' });
+        const res = await fetchWithTimeout(prox, {}, 8000);
         if (!res.ok) return '';
         const html = await res.text();
-        const m = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+        let m = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+        if (m && m[1]) { try { return new URL(m[1], url).href; } catch (_) { return m[1]; } }
+        m = html.match(/"image"\s*:\s*"(https?:[^"']+\.(?:jpe?g|png|webp|avif)[^"']*)"/i);
+        if (m && m[1]) return m[1];
+        m = html.match(/"contentUrl"\s*:\s*"(https?:[^"']+\.(?:jpe?g|png|webp|avif)[^"']*)"/i);
+        if (m && m[1]) return m[1];
+        m = html.match(/<link[^>]+rel=["']image_src["'][^>]+href=["']([^"']+)["']/i);
+        if (m && m[1]) { try { return new URL(m[1], url).href; } catch (_) { return m[1]; } }
+        m = html.match(/<img[^>]+src=["']([^"']+\.(?:jpe?g|png|webp|avif)(?:\?[^"']*)?)["'][^>]*>/i);
         if (m && m[1]) { try { return new URL(m[1], url).href; } catch (_) { return m[1]; } }
       } catch (_) {}
     }
