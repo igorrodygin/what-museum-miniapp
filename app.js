@@ -97,29 +97,42 @@
   const isWikimediaThumb = (url) => /upload\.wikimedia\.org\/.*\/thumb\//i.test(url || '');
   const isDataImage = (url) => /^data:image\//i.test(url || '');
   const isArtsPage = (url) => /artsandculture\.google\.com\/asset\//i.test(url || '');
-  const isRussianMuseum = (url) => /rusmuseumvrm\.ru\/data\/collections\/painting\//i.test(url || '');
+  const isRussianMuseum = (url) => /rusmuseumvrm\.ru\/data\/collections\/painting\/.+\/index\.php/i.test(url || '');
 
   function isLikelyImage(url) {
-    return isDirectImage(url) || isGoogleusercontent(url) || isWikimediaThumb(url) || isDataImage(url) || isRussianMuseum(url);
+    return isDirectImage(url) || isGoogleusercontent(url) || isWikimediaThumb(url) || isDataImage(url);
   }
 
   async function resolveImage(url) {
     if (!url) return '';
-    if (isLikelyImage(url)) return url;
-    if (isArtsPage(url)) {
-      // читаем HTML страницы через безопасный прокси и достаем og:image
+
+    // прямые картинки оставляем как есть
+    if (isDirectImage(url) || isGoogleusercontent(url) || isWikimediaThumb(url) || isDataImage(url)) {
+      return url;
+    }
+
+    // Страницы: тянем og:image через безопасный прокси
+    if (isArtsPage(url) || isRussianMuseumPage(url)) {
       const prox = 'https://r.jina.ai/http/' + url.replace(/^https?:\/\//, '');
       try {
         const res = await fetch(prox, { cache: 'reload' });
         if (!res.ok) return '';
         const html = await res.text();
-        const m = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
-        if (m && m[1]) return m[1];
+
+        // 1) og:image
+        let m = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+        if (m && m[1]) return new URL(m[1], url).href;
+
+        // 2) запасной вариант: большая картинка в ссылке
+        m = html.match(/<a[^>]+href=["']([^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["'][^>]*>/i);
+        if (m && m[1]) return new URL(m[1], url).href;
       } catch (_) {}
     }
-    // как есть — пусть <img> попробует загрузить
-    return url;
+
+    // иначе лучше вернуть пусто, чем HTML-страницу
+    return '';
   }
+
 
   function setViewGame() {
     resultsEl.style.display = 'none';
