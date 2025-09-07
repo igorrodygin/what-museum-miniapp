@@ -97,9 +97,10 @@
   const isWikimediaThumb = (url) => /upload\.wikimedia\.org\/.*\/thumb\//i.test(url || '');
   const isDataImage = (url) => /^data:image\//i.test(url || '');
   const isArtsPage = (url) => /artsandculture\.google\.com\/asset\//i.test(url || '');
+  const isRussianMuseum = (url) => /rusmuseumvrm\.ru\/data\/collections\/painting\//i.test(url || '');
 
   function isLikelyImage(url) {
-    return isDirectImage(url) || isGoogleusercontent(url) || isWikimediaThumb(url) || isDataImage(url);
+    return isDirectImage(url) || isGoogleusercontent(url) || isWikimediaThumb(url) || isDataImage(url) || isRussianMuseum(url);
   }
 
   async function resolveImage(url) {
