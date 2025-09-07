@@ -14,7 +14,7 @@
     if (!url) return;
     try {
       if (window?.Telegram?.WebApp?.openLink) {
-        window.Telegram.WebApp.openLink(url, { try_instant_view: true });
+        window.Telegram.WebApp.openLink(url);
         return;
       }
     } catch (_) {}
@@ -26,9 +26,9 @@
       document.body.appendChild(a);
       a.click();
       a.remove();
-    } catch (_) {
-      try { window.open(url, '_blank', 'noopener'); } catch {}
-    }
+      return;
+    } catch (_) {}
+    try { window.open(url, '_blank', 'noopener'); return; } catch (_) {}
     try { window.location.href = url; } catch (_) {}
   }
 
