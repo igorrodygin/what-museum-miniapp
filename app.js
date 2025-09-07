@@ -29,6 +29,7 @@
     } catch (_) {
       try { window.open(url, '_blank', 'noopener'); } catch {}
     }
+    try { window.location.href = url; } catch (_) {}
   }
 
   // Elements
@@ -77,7 +78,8 @@
     const year = raw.year || raw.date || raw.created || raw.when || '';
     const museum = raw.museum || raw.collection || raw.gallery || '';
     const image = raw.image_url || raw.image || raw.img || raw.url || raw.photo || '';
-    return { title, artist, year, museum, image_url: image };
+    const source = raw.source_url || raw.source || raw.page || raw.link || raw.permalink || '';
+    return { title, artist, year, museum, image_url: image, source_url: source };
   }
 
   function looksLikePainting(x) {
@@ -229,7 +231,7 @@
     setViewGame();
 
     const p = items[index];
-    currentSourceUrl = p.image_url || '';
+    currentSourceUrl = p.source_url || p.image_url || '';
     titleEl.textContent = p.title || 'Без названия';
     artistEl.textContent = p.artist ? `${p.artist}` : '—';
     yearEl.textContent = p.year ? `Год: ${p.year}` : '';
@@ -366,6 +368,17 @@
   if (yearEl) {
     yearEl.style.cursor = 'pointer';
     yearEl.addEventListener('click', (e) => { e.preventDefault(); openLinkUniversal(currentSourceUrl); });
+  }
+
+  // Make the whole card open the source (except clicking on action buttons)
+  if (cardEl) {
+    cardEl.style.cursor = 'pointer';
+    cardEl.addEventListener('click', (e) => {
+      const el = e.target;
+      if (el && (el.closest && el.closest('#btn-tretyakov, #btn-rusmuseum, #btn-restart, #btn-share'))) return;
+      if (!currentSourceUrl) return;
+      openLinkUniversal(currentSourceUrl);
+    });
   }
 
 
