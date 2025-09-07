@@ -2,7 +2,7 @@
   'use strict';
 
   // 👇 ЗАМЕНИТЕ на имя вашего бота (без @)
-  const BOT_USERNAME = "MusemsFightBot";
+  const BOT_USERNAME = "WhatMuseumBot";
 
   const tg = window.Telegram?.WebApp;
   try { tg?.ready?.(); tg?.expand?.(); } catch (_) {}
